@@ -68,7 +68,10 @@ module ElasticAPM
       Sidekiq::Testing.server_middleware do |chain|
         chain.add Injectors::SidekiqInjector::Middleware
       end
-      Sidekiq.logger = Logger.new(nil) # sssshh, we're testing
+
+      # Sidekiq expects #write
+      class OmgLogger < Logger; alias << write; end
+      Sidekiq.logger = OmgLogger.new(nil) # sssshh, we're testing
     end
 
     it 'starts when sidekiq processors do' do
