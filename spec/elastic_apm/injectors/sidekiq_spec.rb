@@ -6,7 +6,11 @@ require 'elastic_apm/injectors/sidekiq'
 require 'sidekiq'
 require 'sidekiq/manager'
 require 'sidekiq/testing'
-require 'active_job'
+
+begin
+  require 'active_job'
+rescue LoadError
+end
 
 module ElasticAPM
   RSpec.describe Injectors::SidekiqInjector do
@@ -48,13 +52,15 @@ module ElasticAPM
       end
     end
 
-    class ActiveJobbyJob < ActiveJob::Base
-      include SaveTransaction
-      self.queue_adapter = :sidekiq
-      self.logger = nil # stay quiet
+    if defined?(ActiveJob)
+      class ActiveJobbyJob < ActiveJob::Base
+        include SaveTransaction
+        self.queue_adapter = :sidekiq
+        self.logger = nil # stay quiet
 
-      def perform
-        set_current_transaction!
+        def perform
+          set_current_transaction!
+        end
       end
     end
 
@@ -62,7 +68,7 @@ module ElasticAPM
       Sidekiq::Testing.server_middleware do |chain|
         chain.add Injectors::SidekiqInjector::Middleware
       end
-      Sidekiq.logger = nil # sssshh, we're testing
+      Sidekiq.logger = Logger.new(nil) # sssshh, we're testing
     end
 
     it 'starts when sidekiq processors do' do
@@ -77,7 +83,7 @@ module ElasticAPM
       expect(manager).to be_stopped
     end
 
-    context 'with an agent' do
+    context 'with an agent', :with_fake_server do
       around do |example|
         ElasticAPM.start(enabled_injectors: %w[sidekiq])
         example.run
@@ -93,11 +99,9 @@ module ElasticAPM
         expect(transaction).to_not be_nil
         expect(transaction.name).to eq 'ElasticAPM::HardWorker'
         expect(transaction.type).to eq 'Sidekiq'
-
-        ElasticAPM.stop
       end
 
-      it 'reports errors', :with_fake_server do
+      it 'reports errors' do
         Sidekiq::Testing.inline! do
           expect do
             ExplodingWorker.perform_async
@@ -117,9 +121,7 @@ module ElasticAPM
         expect(type).to eq 'ZeroDivisionError'
       end
 
-      it 'knows the name of ActiveJob jobs' do
-        ActiveJob::Base.queue_adapter = :sidekiq
-
+      it 'knows the name of ActiveJob jobs', if: defined?(ActiveJob) do
         Sidekiq::Testing.inline! do
           ActiveJobbyJob.perform_later
         end
