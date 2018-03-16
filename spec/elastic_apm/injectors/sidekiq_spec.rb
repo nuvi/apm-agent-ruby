@@ -69,13 +69,7 @@ module ElasticAPM
         chain.add Injectors::SidekiqInjector::Middleware
       end
 
-      # Sidekiq expects #write
-      class OmgLogger < Logger
-        def write(*args)
-          self.<<(*args)
-        end
-      end
-      Sidekiq.logger = OmgLogger.new(nil) # sssshh, we're testing
+      Sidekiq.logger = Logger.new(nil) # sssshh, we're testing
     end
 
     it 'starts when sidekiq processors do' do
