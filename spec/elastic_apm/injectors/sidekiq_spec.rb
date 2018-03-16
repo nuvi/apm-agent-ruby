@@ -70,7 +70,11 @@ module ElasticAPM
       end
 
       # Sidekiq expects #write
-      class OmgLogger < Logger; alias << write; end
+      class OmgLogger < Logger
+        def write(*args)
+          self.<<(*args)
+        end
+      end
       Sidekiq.logger = OmgLogger.new(nil) # sssshh, we're testing
     end
 
